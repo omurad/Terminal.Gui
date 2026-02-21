@@ -62,11 +62,14 @@ public partial class View
         if (App?.TopRunnableView == this && App is { })
         {
             //App?.ClearScreenNextIteration = true;
-            List<View?> runnables = [.. App?.SessionStack?.Select (r => r.Runnable as View).Where (v => v != this && v?.NeedsDraw == false)!];
-
-            foreach (View? runnable in runnables)
+            foreach (Terminal.Gui.App.SessionToken session in App.SessionStack!)
             {
-                runnable?.SetNeedsDraw ();
+                if (session.Runnable is not View runnable || runnable == this || runnable.NeedsDraw)
+                {
+                    continue;
+                }
+
+                runnable.SetNeedsDraw ();
             }
         }
 
@@ -107,7 +110,9 @@ public partial class View
             adornment.Parent?.SetSubViewNeedsDrawDownHierarchy ();
         }
 
-        foreach (View subview in InternalSubViews.Snapshot ())
+        View [] subViewsSnapshot = InternalSubViews.Snapshot ();
+
+        foreach (View subview in subViewsSnapshot)
         {
             if (!subview.Frame.IntersectsWith (viewPortRelativeRegion))
             {
@@ -133,8 +138,19 @@ public partial class View
         Border?.ClearNeedsDraw ();
         Padding?.ClearNeedsDraw ();
 
-        foreach (View subview in InternalSubViews.Snapshot ())
+        View [] subViewsSnapshot = InternalSubViews.Snapshot ();
+
+        foreach (View subview in subViewsSnapshot)
         {
+            if (!subview.NeedsDraw
+                && !subview.SubViewNeedsDraw
+                && subview.Margin?.NeedsDraw != true
+                && subview.Border?.NeedsDraw != true
+                && subview.Padding?.NeedsDraw != true)
+            {
+                continue;
+            }
+
             subview.ClearNeedsDraw ();
         }
 

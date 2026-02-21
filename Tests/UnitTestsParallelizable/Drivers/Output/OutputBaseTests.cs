@@ -144,9 +144,10 @@ public class OutputBaseTests
 
         output.Write (buffer);
 
-        // Assert: both characters were written (use Contains to avoid CI side effects)
-        Assert.Contains ("A", output.GetLastOutput ());
-        Assert.Contains ("C", output.GetLastOutput ());
+        // Assert: only the most recently written frame is captured (not accumulated history)
+        Assert.Contains ("X", output.GetLastOutput ());
+        Assert.DoesNotContain ("A", output.GetLastOutput ());
+        Assert.DoesNotContain ("C", output.GetLastOutput ());
 
         // Dirty flags cleared for the written cells
         Assert.False (buffer.Contents! [0, 0].IsDirty);
@@ -280,5 +281,69 @@ public class OutputBaseTests
         Assert.Equal (driver.GetSixels (), app.Driver.GetSixels ());
 
         app.Dispose ();
+    }
+
+    [Fact]
+    public void Write_SparseRows_ClearsDirtyLineFlags_ForTouchedRows ()
+    {
+        // Arrange
+        AnsiOutput output = new ();
+        OutputBufferImpl buffer = new ();
+        buffer.SetSize (6, 4);
+
+        for (int row = 0; row < buffer.Rows; row++)
+        {
+            buffer.DirtyLines [row] = false;
+            for (int col = 0; col < buffer.Cols; col++)
+            {
+                buffer.Contents! [row, col].IsDirty = false;
+            }
+        }
+
+        buffer.Move (0, 1);
+        buffer.AddStr ("AA");
+        buffer.Move (0, 3);
+        buffer.AddStr ("BB");
+
+        Assert.True (buffer.DirtyLines [1]);
+        Assert.True (buffer.DirtyLines [3]);
+        Assert.False (buffer.DirtyLines [0]);
+        Assert.False (buffer.DirtyLines [2]);
+
+        // Act
+        output.Write (buffer);
+
+        // Assert
+        Assert.False (buffer.DirtyLines [0]);
+        Assert.False (buffer.DirtyLines [1]);
+        Assert.False (buffer.DirtyLines [2]);
+        Assert.False (buffer.DirtyLines [3]);
+    }
+
+    [Fact]
+    public void FillRect_SetsDirtyLineFlags_ForTouchedRows ()
+    {
+        // Arrange
+        OutputBufferImpl buffer = new ();
+        buffer.SetSize (8, 5);
+
+        for (int row = 0; row < buffer.Rows; row++)
+        {
+            buffer.DirtyLines [row] = false;
+            for (int col = 0; col < buffer.Cols; col++)
+            {
+                buffer.Contents! [row, col].IsDirty = false;
+            }
+        }
+
+        // Act
+        buffer.FillRect (new (1, 2, 3, 2), 'X');
+
+        // Assert
+        Assert.False (buffer.DirtyLines [0]);
+        Assert.False (buffer.DirtyLines [1]);
+        Assert.True (buffer.DirtyLines [2]);
+        Assert.True (buffer.DirtyLines [3]);
+        Assert.False (buffer.DirtyLines [4]);
     }
 }

@@ -18,7 +18,7 @@ public partial class View // Drawing APIs
         View [] viewsArray = views.Snapshot ();
 
         // The draw context is used to track the region drawn by each view.
-        var context = new DrawContext ();
+        DrawContext context = new ();
 
         foreach (View view in viewsArray)
         {
@@ -50,7 +50,20 @@ public partial class View // Drawing APIs
             if (view is not Adornment && view.SuperView is { } && view.SuperView != lastSuperView)
             {
                 // Check if ANY subview of this SuperView still needs drawing
-                bool anySubViewNeedsDrawing = view.SuperView.InternalSubViews.Any (v => v.NeedsDraw || v.SubViewNeedsDraw);
+                bool anySubViewNeedsDrawing = false;
+
+                for (int i = 0; i < view.SuperView.InternalSubViews.Count; i++)
+                {
+                    View subView = view.SuperView.InternalSubViews [i];
+
+                    if (!subView.NeedsDraw && !subView.SubViewNeedsDraw)
+                    {
+                        continue;
+                    }
+
+                    anySubViewNeedsDrawing = true;
+                    break;
+                }
 
                 if (!anySubViewNeedsDrawing)
                 {
@@ -434,11 +447,6 @@ public partial class View // Drawing APIs
             return;
         }
 
-        if (!string.IsNullOrEmpty (TextFormatter.Text))
-        {
-            TextFormatter.NeedsFormat = true;
-        }
-
         if (OnDrawingText (context))
         {
             return;
@@ -492,11 +500,12 @@ public partial class View // Drawing APIs
     {
         Rectangle drawRect = new Rectangle (ContentToScreen (Point.Empty), GetContentSize ());
 
-        // Use GetDrawRegion to get precise drawn areas
-        Region textRegion = TextFormatter.GetDrawRegion (drawRect);
-
-        // Report the drawn area to the context
-        context?.AddDrawnRegion (textRegion);
+        // Transparent views need precise text regions for clip exclusion.
+        if (context is { } && ViewportSettings.HasFlag (ViewportSettingsFlags.Transparent))
+        {
+            Region textRegion = TextFormatter.GetDrawRegion (drawRect);
+            context.AddDrawnRegion (textRegion);
+        }
 
         if (Driver is { })
         {
@@ -687,10 +696,19 @@ public partial class View // Drawing APIs
             return;
         }
 
+        View [] subViewsSnapshot = InternalSubViews.Snapshot ();
+
         // Draw the SubViews in reverse Z-order to leverage clipping.
         // SubViews earlier in the collection are drawn last (on top).
-        foreach (View view in InternalSubViews.Snapshot ().Where (v => v.Visible).Reverse ())
+        for (int i = subViewsSnapshot.Length - 1; i >= 0; i--)
         {
+            View view = subViewsSnapshot [i];
+
+            if (!view.Visible)
+            {
+                continue;
+            }
+
             // TODO: HACK - This forcing of SetNeedsDraw with SuperViewRendersLineCanvas enables auto line join to work, but is brute force.
             if (view.SuperViewRendersLineCanvas || view.ViewportSettings.HasFlag (ViewportSettingsFlags.Transparent))
             {

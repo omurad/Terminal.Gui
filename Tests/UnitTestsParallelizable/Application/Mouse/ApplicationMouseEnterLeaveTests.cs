@@ -187,6 +187,38 @@ public class ApplicationMouseEnterLeaveTests
     }
 
     [Fact]
+    public void RaiseMouseEnterLeaveEvents_SameViewsDifferentOrder_DoesNotReenterOrLeave ()
+    {
+        // Arrange
+        IApplication? app = Application.Create ();
+        Runnable<bool> runnable = new () { Frame = new (0, 0, 10, 10) };
+        app.Begin (runnable);
+
+        TestView view1 = new ();
+        TestView view2 = new ()
+        {
+            X = 2,
+            Y = 1
+        };
+
+        runnable.Add (view1);
+        runnable.Add (view2);
+
+        app.Mouse.CachedViewsUnderMouse.Clear ();
+        app.Mouse.CachedViewsUnderMouse.Add (view1);
+        app.Mouse.CachedViewsUnderMouse.Add (view2);
+
+        // Act
+        app.Mouse.RaiseMouseEnterLeaveEvents (new (2, 1), [view2, view1]);
+
+        // Assert
+        Assert.Equal (0, view1.OnMouseEnterCalled);
+        Assert.Equal (0, view1.OnMouseLeaveCalled);
+        Assert.Equal (0, view2.OnMouseEnterCalled);
+        Assert.Equal (0, view2.OnMouseLeaveCalled);
+    }
+
+    [Fact]
     public void RaiseMouseEnterLeaveEvents_NoViewsUnderMouse_DoesNotCallOnMouseEnterOrLeave ()
     {
         // Arrange

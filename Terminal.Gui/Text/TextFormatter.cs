@@ -608,8 +608,6 @@ public class TextFormatter
     /// </remarks>
     public List<string> GetLines ()
     {
-        string text = _text!.ReplaceLineEndings ();
-
         // With this check, we protect against subclasses with overrides of Text
         if (string.IsNullOrEmpty (Text) || ConstrainToWidth is 0 || ConstrainToHeight is 0)
         {
@@ -624,13 +622,15 @@ public class TextFormatter
             return _lines;
         }
 
+        string text = _text!.ReplaceLineEndings ();
+
         int width = ConstrainToWidth ?? int.MaxValue;
         int height = ConstrainToHeight ?? int.MaxValue;
 
-        if (FindHotKey (_text!, HotKeySpecifier, out _hotKeyPos, out Key newHotKey))
+        if (FindHotKey (text, HotKeySpecifier, out _hotKeyPos, out Key newHotKey))
         {
             HotKey = newHotKey;
-            text = RemoveHotKeySpecifier (Text, _hotKeyPos, HotKeySpecifier);
+            text = RemoveHotKeySpecifier (text, _hotKeyPos, HotKeySpecifier);
             text = ReplaceHotKeyWithTag (text, _hotKeyPos);
         }
 

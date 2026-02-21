@@ -105,6 +105,7 @@ public class OutputBufferWideCharTests
 
         Assert.Equal ("│", buffer.Contents [1, 3].Grapheme);
         Assert.True (buffer.Contents [1, 3].IsDirty);
+        Assert.True (buffer.DirtyLines [1]);
     }
 
     /// <summary>

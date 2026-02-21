@@ -50,6 +50,7 @@ public abstract class OutputBase
     private TextStyle _redrawTextStyle = TextStyle.None;
 
     StringBuilder _lastOutputStringBuilder = new ();
+    private bool _clearLastOutputPending;
 
     /// <summary>
     ///     Writes dirty cells from the buffer to the console. Hides cursor, iterates rows/cols,
@@ -58,90 +59,84 @@ public abstract class OutputBase
     /// </summary>
     public virtual void Write (IOutputBuffer buffer)
     {
+        _clearLastOutputPending = true;
+        if (buffer.Contents is null)
+        {
+            return;
+        }
+
         StringBuilder outputStringBuilder = new ();
         int top = 0;
         int left = 0;
         int rows = buffer.Rows;
         int cols = buffer.Cols;
         Attribute? redrawAttr = null;
-        int lastCol = -1;
+        OutputBufferImpl? concreteBuffer = buffer as OutputBufferImpl;
+        bool []? dirtyLines = concreteBuffer?.DirtyLines;
+        bool useDirtyLineFastPath = dirtyLines is { Length: > 0 };
 
         // Process each row
         for (int row = top; row < rows; row++)
         {
-            if (!SetCursorPositionImpl (0, row))
+            if (useDirtyLineFastPath && row < dirtyLines!.Length && !dirtyLines [row])
             {
-                return;
-            }
+                bool rowHasDirtyCells = false;
 
-            outputStringBuilder.Clear ();
-
-            // Process columns in row
-            for (int col = left; col < cols; col++)
-            {
-                lastCol = -1;
-                var outputWidth = 0;
-
-                // Batch consecutive dirty cells
-                for (; col < cols; col++)
+                for (int colIndex = left; colIndex < cols; colIndex++)
                 {
-                    // Skip clean cells - position cursor and continue
-                    if (!buffer.Contents! [row, col].IsDirty)
+                    if (!buffer.Contents [row, colIndex].IsDirty)
                     {
-                        if (outputStringBuilder.Length > 0)
-                        {
-                            // This clears outputStringBuilder
-                            WriteToConsole (outputStringBuilder, ref lastCol, ref outputWidth);
-                        }
-                        else if (lastCol == -1)
-                        {
-                            lastCol = col;
-                        }
-
-                        if (lastCol + 1 < cols)
-                        {
-                            lastCol++;
-                        }
-
-                        SetCursorPositionImpl (lastCol, row);
-
                         continue;
                     }
 
-                    if (lastCol == -1)
-                    {
-                        lastCol = col;
-                    }
+                    rowHasDirtyCells = true;
+                    break;
+                }
 
-                    // Append dirty cell as ANSI and mark clean
+                if (!rowHasDirtyCells)
+                {
+                    continue;
+                }
+            }
+
+            int col = left;
+            while (col < cols)
+            {
+                if (!buffer.Contents [row, col].IsDirty)
+                {
+                    col++;
+
+                    continue;
+                }
+
+                int runStartCol = col;
+                int outputWidth = 0;
+                outputStringBuilder.Clear ();
+
+                while (col < cols && buffer.Contents [row, col].IsDirty)
+                {
+                    int originalCol = col;
                     Cell cell = buffer.Contents [row, col];
                     buffer.Contents [row, col].IsDirty = false;
                     AppendCellAnsi (cell, outputStringBuilder, ref redrawAttr, ref _redrawTextStyle, cols, ref col, ref outputWidth);
 
-                    if (col != lastCol)
+                    if (col != originalCol && col < cols)
                     {
-                        // Was a wide grapheme so mark clean next cell
+                        // Was a wide grapheme so mark clean next cell.
                         // See https://github.com/gui-cs/Terminal.Gui/issues/4466
                         buffer.Contents [row, col].IsDirty = false;
                     }
+
+                    col++;
                 }
+
+                SetCursorPositionImpl (runStartCol, row);
+                WriteToConsole (outputStringBuilder);
             }
 
-            // Flush buffered output for row
-            if (outputStringBuilder.Length > 0)
+            if (useDirtyLineFastPath && row < dirtyLines!.Length)
             {
-                if (IsLegacyConsole)
-                {
-                    Write (outputStringBuilder);
-                }
-                else
-                {
-                    SetCursorPositionImpl (lastCol, row);
-
-                    // Wrap URLs with OSC 8 hyperlink sequences
-                    StringBuilder processed = Osc8UrlLinker.WrapOsc8 (outputStringBuilder);
-                    Write (processed);
-                }
+                dirtyLines [row] = false;
             }
         }
 
@@ -193,6 +188,12 @@ public abstract class OutputBase
     /// <param name="output"></param>
     protected virtual void Write (StringBuilder output)
     {
+        if (_clearLastOutputPending)
+        {
+            _lastOutputStringBuilder.Clear ();
+            _clearLastOutputPending = false;
+        }
+
         _lastOutputStringBuilder.Append (output);
     }
 
@@ -324,11 +325,11 @@ public abstract class OutputBase
 
     /// <summary>
     ///     Writes buffered output to console, wrapping URLs with OSC 8 hyperlinks (non-legacy only),
-    ///     then clears the buffer and advances <paramref name="lastCol"/> by <paramref name="outputWidth"/>.
+    ///     when URL-like content is present.
     /// </summary>
-    private void WriteToConsole (StringBuilder output, ref int lastCol, ref int outputWidth)
+    private void WriteToConsole (StringBuilder output)
     {
-        if (IsLegacyConsole)
+        if (IsLegacyConsole || !MayContainHyperlinkCandidate (output))
         {
             Write (output);
         }
@@ -338,9 +339,23 @@ public abstract class OutputBase
             StringBuilder processed = Osc8UrlLinker.WrapOsc8 (output);
             Write (processed);
         }
+    }
 
-        output.Clear ();
-        lastCol += outputWidth;
-        outputWidth = 0;
+    private static bool MayContainHyperlinkCandidate (StringBuilder output)
+    {
+        if (output.Length < 3)
+        {
+            return false;
+        }
+
+        for (int i = 0; i <= output.Length - 3; i++)
+        {
+            if (output [i] == ':' && output [i + 1] == '/' && output [i + 2] == '/')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

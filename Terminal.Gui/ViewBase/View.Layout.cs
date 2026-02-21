@@ -740,7 +740,9 @@ public partial class View // Layout APIs
 
         List<View> redo = new ();
 
-        foreach (View v in ordered.Snapshot ())
+        View [] orderedSnapshot = [.. ordered];
+
+        foreach (View v in orderedSnapshot)
         {
             if (!v.Layout (contentSize))
             {
@@ -871,7 +873,13 @@ public partial class View // Layout APIs
 
         // TODO: Optimize this - see Setting_Thickness_Causes_Adornment_SubView_Layout
         // Use a stack to avoid recursion
-        Stack<View> stack = new (InternalSubViews.Snapshot ().ToList ());
+        Stack<View> stack = new ();
+        View [] subViewsSnapshot = InternalSubViews.Snapshot ();
+
+        for (int i = subViewsSnapshot.Length - 1; i >= 0; i--)
+        {
+            stack.Push (subViewsSnapshot [i]);
+        }
 
         while (stack.Count > 0)
         {
@@ -961,8 +969,13 @@ public partial class View // Layout APIs
     /// </param>
     internal void CollectDim (Dim dim, View from, ref HashSet<View> nNodes, ref HashSet<(View, View)> nEdges)
     {
-        foreach (View target in dim.GetReferencedViews ().Where (v => v != this))
+        foreach (View target in dim.GetReferencedViews ())
         {
+            if (target == this)
+            {
+                continue;
+            }
+
             nEdges.Add ((target, from));
         }
     }
@@ -979,8 +992,13 @@ public partial class View // Layout APIs
     /// </param>
     internal void CollectPos (Pos pos, View from, ref HashSet<View> nNodes, ref HashSet<(View, View)> nEdges)
     {
-        foreach (View target in pos.GetReferencedViews ().Where (v => v != this))
+        foreach (View target in pos.GetReferencedViews ())
         {
+            if (target == this)
+            {
+                continue;
+            }
+
             nEdges.Add ((target, from));
         }
     }
@@ -990,44 +1008,93 @@ public partial class View // Layout APIs
     {
         List<View> result = new ();
 
-        // Set of all nodes with no incoming edges
-        HashSet<View> noEdgeNodes = new (nodes.Where (n => edges.All (e => !e.To.Equals (n))));
+        HashSet<View> nodeSet = new (nodes);
+        Dictionary<View, int> incomingCounts = new ();
+        Dictionary<View, List<View>> outgoingByNode = new ();
 
-        while (noEdgeNodes.Any ())
+        foreach (View node in nodeSet)
         {
-            //  remove a node n from S
-            View n = noEdgeNodes.First ();
-            noEdgeNodes.Remove (n);
+            incomingCounts [node] = 0;
+        }
 
-            // add n to tail of L
+        foreach ((View From, View To) edge in edges)
+        {
+            if (nodeSet.Contains (edge.From))
+            {
+                if (!outgoingByNode.TryGetValue (edge.From, out List<View>? outgoing))
+                {
+                    outgoing = [];
+                    outgoingByNode [edge.From] = outgoing;
+                }
+
+                outgoing.Add (edge.To);
+            }
+
+            if (nodeSet.Contains (edge.To))
+            {
+                incomingCounts [edge.To] = incomingCounts [edge.To] + 1;
+            }
+        }
+
+        Queue<View> noEdgeNodes = new ();
+
+        foreach (KeyValuePair<View, int> incomingCount in incomingCounts)
+        {
+            if (incomingCount.Value == 0)
+            {
+                noEdgeNodes.Enqueue (incomingCount.Key);
+            }
+        }
+
+        while (noEdgeNodes.Count > 0)
+        {
+            View n = noEdgeNodes.Dequeue ();
+
             if (n != superView)
             {
                 result.Add (n);
             }
 
-            // for each node m with an edge e from n to m do
-            foreach ((View From, View To) e in edges.Where (e => e.From.Equals (n)).ToArray ())
+            if (!outgoingByNode.TryGetValue (n, out List<View>? outgoing))
             {
-                View m = e.To;
+                continue;
+            }
 
-                // remove edge e from the graph
-                edges.Remove (e);
-
-                // if m has no other incoming edges then
-                if (edges.All (me => !me.To.Equals (m)) && m != superView)
+            foreach (View m in outgoing)
+            {
+                if (!edges.Remove ((n, m)))
                 {
-                    // insert m into S
-                    noEdgeNodes.Add (m);
+                    continue;
+                }
+
+                if (!incomingCounts.TryGetValue (m, out int incomingCount))
+                {
+                    continue;
+                }
+
+                incomingCount--;
+                incomingCounts [m] = incomingCount;
+
+                if (incomingCount == 0 && m != superView)
+                {
+                    noEdgeNodes.Enqueue (m);
                 }
             }
         }
 
-        if (!edges.Any ())
+        if (edges.Count == 0)
         {
             return result;
         }
 
-        foreach ((View from, View to) in edges)
+        List<(View from, View to)> remainingEdges = [];
+
+        foreach ((View From, View To) edge in edges)
+        {
+            remainingEdges.Add ((edge.From, edge.To));
+        }
+
+        foreach ((View from, View to) in remainingEdges)
         {
             if (from == to)
             {
@@ -1210,8 +1277,13 @@ public partial class View // Layout APIs
         // Traverse all visible runnables, topmost first (reverse stack order)
         if (App?.SessionStack!.Count > 0)
         {
-            foreach (View? runnable in App.SessionStack!.Select (r => r.Runnable as View))
+            foreach (Terminal.Gui.App.SessionToken session in App.SessionStack!)
             {
+                if (session.Runnable is not View runnable)
+                {
+                    continue;
+                }
+
                 if (runnable!.Visible && runnable.Contains (screenLocation))
                 {
                     List<View?> result = GetViewsUnderLocation (runnable, screenLocation, excludeViewportSettingsFlags);
@@ -1270,6 +1342,8 @@ public partial class View // Layout APIs
             return viewsUnderLocation;
         }
 
+        HashSet<View?> viewsSet = [.. viewsUnderLocation];
+
         // Remove all views that have an adornment with ViewportSettings.TransparentMouse; they are in the list
         // because the point was in their adornment, and if the adornment is transparent, they should be removed.
         viewsUnderLocation.RemoveAll (v =>
@@ -1281,17 +1355,17 @@ public partial class View // Layout APIs
 
                                           bool? ret = null;
 
-                                          if (viewsUnderLocation.Contains (v.Margin) && v.Margin!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsSet.Contains (v.Margin) && v.Margin!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }
 
-                                          if (viewsUnderLocation.Contains (v.Border) && v.Border!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsSet.Contains (v.Border) && v.Border!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }
 
-                                          if (viewsUnderLocation.Contains (v.Padding) && v.Padding!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsSet.Contains (v.Padding) && v.Padding!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }

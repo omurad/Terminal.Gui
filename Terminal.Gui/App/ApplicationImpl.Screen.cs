@@ -59,7 +59,15 @@ internal partial class ApplicationImpl
             Driver?.ClearContents ();
         }
 
-        List<View?> views = [.. SessionStack!.Select (r => r.Runnable! as View)!];
+        List<View> views = [];
+
+        foreach (SessionToken session in SessionStack!)
+        {
+            if (session.Runnable is View runnableView)
+            {
+                views.Add (runnableView);
+            }
+        }
 
         if (Popover?.GetActivePopover () as View is { Visible: true } visiblePopover)
         {
@@ -68,11 +76,27 @@ internal partial class ApplicationImpl
             views.Insert (0, visiblePopover);
         }
 
+        View [] viewsForDraw = [.. views];
+        View [] viewsForLayout = [.. viewsForDraw];
+        Array.Reverse (viewsForLayout);
+
         // Layout
-        bool neededLayout = View.Layout (views.ToArray ().Reverse ()!, Screen.Size);
+        bool neededLayout = View.Layout (viewsForLayout, Screen.Size);
 
         // Draw
-        bool needsDraw = forceRedraw || views.Any (v => v is { NeedsDraw: true } or { SubViewNeedsDraw: true });
+        bool needsDraw = forceRedraw || neededLayout;
+
+        if (!needsDraw)
+        {
+            foreach (View view in viewsForDraw)
+            {
+                if (view.NeedsDraw || view.SubViewNeedsDraw)
+                {
+                    needsDraw = true;
+                    break;
+                }
+            }
+        }
 
         if (Driver is { } && (neededLayout || needsDraw))
         {
@@ -82,7 +106,7 @@ internal partial class ApplicationImpl
 
             // Only force a complete redraw if needed (needsLayout or forceRedraw).
             // Otherwise, just redraw views that need it.
-            View.Draw (views: views.ToArray ().Cast<View> (), neededLayout || forceRedraw);
+            View.Draw (viewsForDraw, neededLayout || forceRedraw);
 
             Driver.Clip = new (Screen);
 

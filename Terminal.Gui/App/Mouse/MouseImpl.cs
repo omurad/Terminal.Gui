@@ -59,7 +59,9 @@ internal class MouseImpl : IMouse, IDisposable
 
         List<View?>? currentViewsUnderMouse = App?.TopRunnableView?.GetViewsUnderLocation (mouseEvent.ScreenPosition, ViewportSettingsFlags.TransparentMouse);
 
-        View? deepestViewUnderMouse = currentViewsUnderMouse?.LastOrDefault ();
+        View? deepestViewUnderMouse = currentViewsUnderMouse is { Count: > 0 }
+                                          ? currentViewsUnderMouse [currentViewsUnderMouse.Count - 1]
+                                          : null;
 
         if (deepestViewUnderMouse is { })
         {
@@ -187,18 +189,47 @@ internal class MouseImpl : IMouse, IDisposable
     /// <inheritdoc/>
     public void RaiseMouseEnterLeaveEvents (Point screenPosition, List<View?> currentViewsUnderMouse)
     {
-        // Tell any views that are no longer under the mouse that the mouse has left
-        List<View?> viewsToLeave = CachedViewsUnderMouse.Where (v => v is { } && !currentViewsUnderMouse.Contains (v)).ToList ();
+        HashSet<View> currentViewSet = [];
 
-        foreach (View? view in viewsToLeave)
+        foreach (View? view in currentViewsUnderMouse)
         {
             if (view is null)
             {
                 continue;
             }
 
+            currentViewSet.Add (view);
+        }
+
+        // Tell any views that are no longer under the mouse that the mouse has left
+        List<View> viewsToLeave = [];
+
+        foreach (View? cachedView in CachedViewsUnderMouse)
+        {
+            if (cachedView is null || currentViewSet.Contains (cachedView))
+            {
+                continue;
+            }
+
+            viewsToLeave.Add (cachedView);
+        }
+
+        foreach (View view in viewsToLeave)
+        {
             view.NewMouseLeaveEvent ();
             CachedViewsUnderMouse.Remove (view);
+        }
+
+        HashSet<View> cachedViewSet = [];
+
+        foreach (View? cachedView in CachedViewsUnderMouse)
+        {
+            if (cachedView is null)
+            {
+                continue;
+            }
+
+            cachedViewSet.Add (cachedView);
         }
 
         // Tell any views that are now under the mouse that the mouse has entered and add them to the list
@@ -209,7 +240,7 @@ internal class MouseImpl : IMouse, IDisposable
                 continue;
             }
 
-            if (CachedViewsUnderMouse.Contains (view))
+            if (cachedViewSet.Contains (view))
             {
                 continue;
             }
@@ -223,6 +254,7 @@ internal class MouseImpl : IMouse, IDisposable
             }
 
             CachedViewsUnderMouse.Add (view);
+            cachedViewSet.Add (view);
             bool raise;
 
             if (view is Adornment { Parent: { } } adornmentView)

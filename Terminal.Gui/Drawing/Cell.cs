@@ -52,6 +52,13 @@ public record struct Cell (Attribute? Attribute = null, bool IsDirty = false, st
     }
 
     /// <summary>
+    ///     INTERNAL: Sets <see cref="Grapheme"/> without validation or normalization.
+    ///     This is for trusted hot paths where input is already known-good.
+    /// </summary>
+    /// <param name="value">The grapheme to set.</param>
+    internal void SetGraphemeTrusted (string value) { _grapheme = value; }
+
+    /// <summary>
     ///     The rune for <see cref="Grapheme"/> or runes for <see cref="Grapheme"/> that when combined makes this Cell a combining sequence.
     /// </summary>
     /// <remarks>

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using System.Text;
 
 namespace Terminal.Gui.Drivers;
 
@@ -65,12 +66,12 @@ public class OutputBufferImpl : IOutputBuffer
     /// <summary>The topmost row in the terminal.</summary>
     public virtual int Top { get; set; } = 0;
 
-    private Rune _column1ReplacementChar = Glyphs.WideGlyphReplacement;
+    private string _column1ReplacementGrapheme = Glyphs.WideGlyphReplacement.ToString ();
 
     /// <inheritdoc />
     public void SetWideGlyphReplacement (Rune column1ReplacementChar)
     {
-        _column1ReplacementChar = column1ReplacementChar;
+        _column1ReplacementGrapheme = column1ReplacementChar.ToString ();
     }
 
     /// <summary>
@@ -141,19 +142,7 @@ public class OutputBufferImpl : IOutputBuffer
     /// <param name="str">String.</param>
     public void AddStr (string str)
     {
-        foreach (string grapheme in GraphemeHelper.GetGraphemes (str))
-        {
-            AddGrapheme (grapheme);
-        }
-    }
-
-    /// <summary>
-    ///     Adds a single grapheme to the display at the current cursor position.
-    /// </summary>
-    /// <param name="grapheme">The grapheme to add.</param>
-    private void AddGrapheme (string grapheme)
-    {
-        if (Contents is null)
+        if (string.IsNullOrEmpty (str) || Contents is null)
         {
             return;
         }
@@ -161,43 +150,61 @@ public class OutputBufferImpl : IOutputBuffer
         Clip ??= new (Screen);
         Rectangle clipRect = Clip!.GetBounds ();
 
-        int printableGraphemeWidth = -1;
-
         lock (Contents)
         {
-            if (IsValidLocation (grapheme, Col, Row))
+            foreach (string grapheme in GraphemeHelper.GetGraphemes (str))
             {
-                // Set attribute and mark dirty for current cell
-                SetAttributeAndDirty (Col, Row);
-                InvalidateOverlappedWideGlyph (Col, Row);
+                AddGraphemeLocked (grapheme, clipRect);
+            }
+        }
+    }
 
-                string printableGrapheme = grapheme.MakePrintable ();
-                printableGraphemeWidth = printableGrapheme.GetColumns ();
-                WriteGraphemeByWidth (Col, Row, printableGrapheme, printableGraphemeWidth, clipRect);
+    /// <summary>
+    ///     Adds a single grapheme to the display at the current cursor position.
+    /// </summary>
+    /// <param name="grapheme">The grapheme to add.</param>
+    /// <param name="clipRect">Cached clip bounds for this AddStr operation.</param>
+    private void AddGraphemeLocked (string grapheme, Rectangle clipRect)
+    {
+        if (Contents is null)
+        {
+            return;
+        }
 
-                DirtyLines [Row] = true;
+        int printableGraphemeWidth = -1;
+
+        bool validLocation = IsValidLocation (grapheme, Col, Row);
+
+        if (validLocation)
+        {
+            // Set attribute and mark dirty for current cell
+            SetAttributeAndDirty (Col, Row);
+            InvalidateOverlappedWideGlyph (Col, Row);
+
+            string printableGrapheme = NormalizeForCellWrite (grapheme.MakePrintable ());
+            printableGraphemeWidth = printableGrapheme.GetColumns ();
+            WriteGraphemeByWidth (Col, Row, printableGrapheme, printableGraphemeWidth, clipRect);
+        }
+
+        // Always advance cursor (even if location was invalid)
+        // Keep Col/Row updates inside the lock to prevent race conditions
+        Col++;
+
+        if (printableGraphemeWidth > 1)
+        {
+            // Skip the second column of a wide character
+            // See issue: https://github.com/gui-cs/Terminal.Gui/issues/4492
+            // Test: AddStr_WideGlyph_Second_Column_Attribute_Outputs_Correctly
+            // Test: AddStr_WideGlyph_Second_Column_Attribute_Set_When_In_Clip
+            if (Clip!.Contains (Col, Row))
+            {
+                // IMPORTANT: We do NOT modify column N+1's IsDirty or Attribute here.
+                // See: https://github.com/gui-cs/Terminal.Gui/issues/4258
+                Contents [Row, Col].Attribute = CurrentAttribute;
             }
 
-            // Always advance cursor (even if location was invalid)
-            // Keep Col/Row updates inside the lock to prevent race conditions
+            // Advance cursor again for wide character
             Col++;
-
-            if (printableGraphemeWidth > 1)
-            {
-                // Skip the second column of a wide character
-                // See issue: https://github.com/gui-cs/Terminal.Gui/issues/4492
-                // Test: AddStr_WideGlyph_Second_Column_Attribute_Outputs_Correctly
-                // Test: AddStr_WideGlyph_Second_Column_Attribute_Set_When_In_Clip
-                if (Clip.Contains (Col, Row))
-                {
-                    // IMPORTANT: We do NOT modify column N+1's IsDirty or Attribute here.
-                    // See: https://github.com/gui-cs/Terminal.Gui/issues/4258
-                    Contents [Row, Col].Attribute = CurrentAttribute;
-                }
-
-                // Advance cursor again for wide character
-                Col++;
-            }
         }
     }
 
@@ -210,6 +217,7 @@ public class OutputBufferImpl : IOutputBuffer
     {
         Contents! [row, col].Attribute = CurrentAttribute;
         Contents [row, col].IsDirty = true;
+        DirtyLines [row] = true;
     }
 
     /// <summary>
@@ -222,8 +230,9 @@ public class OutputBufferImpl : IOutputBuffer
     {
         if (col > 0 && Contents! [row, col - 1].Grapheme.GetColumns () > 1)
         {
-            Contents [row, col - 1].Grapheme = _column1ReplacementChar.ToString ();
+            Contents [row, col - 1].SetGraphemeTrusted (_column1ReplacementGrapheme);
             Contents [row, col - 1].IsDirty = true;
+            DirtyLines [row] = true;
         }
     }
 
@@ -252,7 +261,7 @@ public class OutputBufferImpl : IOutputBuffer
 
             default:
                 // Negative width or non-spacing character (shouldn't normally occur)
-                Contents! [row, col].Grapheme = " ";
+                Contents! [row, col].SetGraphemeTrusted (" ");
                 Contents [row, col].IsDirty = false;
 
                 break;
@@ -269,12 +278,13 @@ public class OutputBufferImpl : IOutputBuffer
     private void WriteGrapheme (int col, int row, string grapheme, Rectangle clipRect)
     {
         Debug.Assert (grapheme.GetColumns () < 2);
-        Contents! [row, col].Grapheme = grapheme;
+        Contents! [row, col].SetGraphemeTrusted (grapheme);
 
         // Mark the next cell as dirty to ensure proper rendering of adjacent content
         if (col < clipRect.Right - 1 && col + 1 < Cols)
         {
             Contents [row, col + 1].IsDirty = true;
+            DirtyLines [row] = true;
         }
     }
 
@@ -290,13 +300,13 @@ public class OutputBufferImpl : IOutputBuffer
         if (!Clip!.Contains (col + 1, row))
         {
             // Second column is outside clip - can't fit wide char here
-            Contents! [row, col].Grapheme = _column1ReplacementChar.ToString ();
+            Contents! [row, col].SetGraphemeTrusted (_column1ReplacementGrapheme);
         }
         else
         {
             // Both columns are in bounds - write the wide character
             // It will naturally render across both columns when output to the terminal
-            Contents! [row, col].Grapheme = grapheme;
+            Contents! [row, col].SetGraphemeTrusted (grapheme);
 
             // DO NOT modify column N+1 here!
             // The wide glyph will naturally render across both columns.
@@ -362,9 +372,19 @@ public class OutputBufferImpl : IOutputBuffer
     /// <inheritdoc/>
     public void FillRect (Rectangle rect, Rune rune)
     {
-        Rectangle clipBounds = Clip?.GetBounds () ?? Screen;
+        Clip ??= new (Screen);
+        Rectangle clipBounds = Clip.GetBounds ();
         // BUGBUG: This should be a method on Region
         rect = Rectangle.Intersect (rect, clipBounds);
+
+        if (rect.IsEmpty)
+        {
+            return;
+        }
+
+        string grapheme = rune != default (Rune) ? rune.ToString () : " ";
+        grapheme = NormalizeForCellWrite (grapheme);
+        int graphemeWidth = grapheme.GetColumns ();
 
         lock (Contents!)
         {
@@ -372,7 +392,8 @@ public class OutputBufferImpl : IOutputBuffer
             {
                 for (int c = rect.X; c < rect.X + rect.Width; c++)
                 {
-                    if (!IsValidLocation (rune.ToString (), c, r))
+                    bool validLocation = c >= 0 && r >= 0 && c + graphemeWidth <= Cols && r < Rows && Clip.Contains (c, r);
+                    if (!validLocation)
                     {
                         continue;
                     }
@@ -381,10 +402,26 @@ public class OutputBufferImpl : IOutputBuffer
                     // So we inline the logic instead.
                     SetAttributeAndDirty (c, r);
                     InvalidateOverlappedWideGlyph (c, r);
-                    string grapheme = rune != default (Rune) ? rune.ToString () : " ";
-                    WriteGraphemeByWidth (c, r, grapheme, grapheme.GetColumns (), clipBounds);
+                    WriteGraphemeByWidth (c, r, grapheme, graphemeWidth, clipBounds);
                 }
             }
+        }
+    }
+
+    private static string NormalizeForCellWrite (string grapheme)
+    {
+        if (string.IsNullOrEmpty (grapheme) || grapheme.IsNormalized (NormalizationForm.FormC))
+        {
+            return grapheme;
+        }
+
+        try
+        {
+            return grapheme.Normalize (NormalizationForm.FormC);
+        }
+        catch (ArgumentException)
+        {
+            return grapheme;
         }
     }
 
@@ -420,3 +457,5 @@ public class OutputBufferImpl : IOutputBuffer
         Row = row;
     }
 }
+
+
