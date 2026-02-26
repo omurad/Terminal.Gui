@@ -699,10 +699,10 @@ public partial class View // Drawing APIs
 
             view.Draw (context);
 
-            if (view.SuperViewRendersLineCanvas)
+            if (view.SuperViewRendersLineCanvas && view._lineCanvas is { } childLineCanvas)
             {
-                LineCanvas.Merge (view.LineCanvas);
-                view.LineCanvas.Clear ();
+                LineCanvas.Merge (childLineCanvas);
+                childLineCanvas.Clear ();
             }
         }
     }
@@ -730,9 +730,11 @@ public partial class View // Drawing APIs
     /// <returns><see langword="true"/> to stop further drawing of <see cref="LineCanvas"/>.</returns>
     protected virtual bool OnRenderingLineCanvas () => false;
 
+    private LineCanvas? _lineCanvas;
+
     /// <summary>The canvas that any line drawing that is to be shared by subviews of this view should add lines to.</summary>
     /// <remarks><see cref="Border"/> adds lines to this LineCanvas.</remarks>
-    public LineCanvas LineCanvas { get; } = new ();
+    public LineCanvas LineCanvas => _lineCanvas ??= new ();
 
     /// <summary>
     ///     Gets or sets whether this View will use its SuperView's <see cref="LineCanvas"/> for rendering any
@@ -756,10 +758,11 @@ public partial class View // Drawing APIs
             return;
         }
 
-        if (!SuperViewRendersLineCanvas && LineCanvas.Bounds != Rectangle.Empty)
+        LineCanvas? lineCanvas = _lineCanvas;
+        if (!SuperViewRendersLineCanvas && lineCanvas is { } && lineCanvas.Bounds != Rectangle.Empty)
         {
             // Get both cell map and Region in a single pass through the canvas
-            (Dictionary<Point, Cell?> cellMap, Region lineRegion) = LineCanvas.GetCellMapWithRegion ();
+            (Dictionary<Point, Cell?> cellMap, Region lineRegion) = lineCanvas.GetCellMapWithRegion ();
 
             foreach (KeyValuePair<Point, Cell?> p in cellMap)
             {
@@ -781,7 +784,7 @@ public partial class View // Drawing APIs
                 context.AddDrawnRegion (lineRegion);
             }
 
-            LineCanvas.Clear ();
+            lineCanvas.Clear ();
         }
     }
 

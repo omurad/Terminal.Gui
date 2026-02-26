@@ -143,7 +143,7 @@ public partial class View
         // This ensures LineCanvas' get redrawn
         if (!SuperViewRendersLineCanvas)
         {
-            LineCanvas.Clear ();
+            _lineCanvas?.Clear ();
         }
     }
 

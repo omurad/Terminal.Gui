@@ -77,7 +77,8 @@ public partial class View : IDisposable, ISupportInitializeNotification
         {
             return;
         }
-        LineCanvas.Dispose ();
+        _lineCanvas?.Dispose ();
+        _lineCanvas = null;
 
         DisposeMouse ();
         DisposeKeyboard ();

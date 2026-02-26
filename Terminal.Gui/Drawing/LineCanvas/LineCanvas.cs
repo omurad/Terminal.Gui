@@ -6,13 +6,14 @@ namespace Terminal.Gui.Drawing;
 /// <summary>Facilitates box drawing and line intersection detection and rendering. Does not support diagonal lines.</summary>
 public class LineCanvas : IDisposable
 {
+    static LineCanvas ()
+    {
+        ConfigurationManager.Applied += ConfigurationManager_Applied;
+    }
+
     /// <summary>Creates a new instance.</summary>
     public LineCanvas ()
     {
-        // TODO: Refactor ConfigurationManager to not use an event handler for this.
-        // Instead, have it call a method on any class appropriately attributed
-        // to update the cached values. See Issue #2871
-        ConfigurationManager.Applied += ConfigurationManager_Applied;
     }
 
     private readonly List<StraightLine> _lines = [];
@@ -474,9 +475,9 @@ public class LineCanvas : IDisposable
         return true;
     }
 
-    private void ConfigurationManager_Applied (object? sender, ConfigurationManagerEventArgs e)
+    private static void ConfigurationManager_Applied (object? sender, ConfigurationManagerEventArgs e)
     {
-        foreach (KeyValuePair<IntersectionRuneType, IntersectionRuneResolver> irr in _runeResolvers)
+        foreach (KeyValuePair<IntersectionRuneType, IntersectionRuneResolver> irr in s_runeResolvers)
         {
             irr.Value.SetGlyphs ();
         }
@@ -496,7 +497,7 @@ public class LineCanvas : IDisposable
         return Fill?.GetAttribute (intersects [0].Point) ?? intersects [0].Line.Attribute;
     }
 
-    private readonly Dictionary<IntersectionRuneType, IntersectionRuneResolver> _runeResolvers = new ()
+    private static readonly Dictionary<IntersectionRuneType, IntersectionRuneResolver> s_runeResolvers = new ()
     {
         {
             IntersectionRuneType.ULCorner,
@@ -566,7 +567,7 @@ public class LineCanvas : IDisposable
         }
 
         IntersectionRuneType runeType = GetRuneTypeForIntersects (intersects);
-        if (_runeResolvers.TryGetValue (runeType, out IntersectionRuneResolver? resolver))
+        if (s_runeResolvers.TryGetValue (runeType, out IntersectionRuneResolver? resolver))
         {
             return resolver.GetRuneForIntersects (intersects);
         }
@@ -1103,7 +1104,6 @@ public class LineCanvas : IDisposable
     /// <inheritdoc/>
     public void Dispose ()
     {
-        ConfigurationManager.Applied -= ConfigurationManager_Applied;
         GC.SuppressFinalize (this);
     }
 }
