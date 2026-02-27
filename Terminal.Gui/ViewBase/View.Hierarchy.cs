@@ -64,22 +64,22 @@ public partial class View // SuperView/SubView hierarchy management (SuperView, 
         // Add direct SubViews
         result.AddRange (InternalSubViews);
 
-        if (includeMargin && Margin is { SubViews: { Count: > 0 } } && Margin.Thickness != Thickness.Empty)
+        if (includeMargin && _margin is { SubViews: { Count: > 0 } } && _margin.Thickness != Thickness.Empty)
         {
             // Add Margin SubViews
-            result.AddRange (Margin.SubViews);
+            result.AddRange (_margin.SubViews);
         }
 
-        if (includeBorder && Border is { SubViews: { Count: > 0 } } && Border.Thickness != Thickness.Empty)
+        if (includeBorder && _border is { SubViews: { Count: > 0 } } && _border.Thickness != Thickness.Empty)
         {
             // Add Border SubViews
-            result.AddRange (Border.SubViews);
+            result.AddRange (_border.SubViews);
         }
 
-        if (includePadding && Padding is { SubViews: { Count: > 0 } } && Padding.Thickness != Thickness.Empty)
+        if (includePadding && _padding is { SubViews: { Count: > 0 } } && _padding.Thickness != Thickness.Empty)
         {
             // Add Padding SubViews
-            result.AddRange (Padding.SubViews);
+            result.AddRange (_padding.SubViews);
         }
 
         return result.AsReadOnly ();
@@ -586,21 +586,21 @@ public partial class View // SuperView/SubView hierarchy management (SuperView, 
 
         if (includeAdornments)
         {
-            bool found = IsInHierarchy (start.Padding, view, includeAdornments);
+            bool found = IsInHierarchy (start._padding, view, includeAdornments);
 
             if (found)
             {
                 return found;
             }
 
-            found = IsInHierarchy (start.Border, view, includeAdornments);
+            found = IsInHierarchy (start._border, view, includeAdornments);
 
             if (found)
             {
                 return found;
             }
 
-            found = IsInHierarchy (start.Margin, view, includeAdornments);
+            found = IsInHierarchy (start._margin, view, includeAdornments);
 
             if (found)
             {

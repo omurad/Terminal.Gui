@@ -14,24 +14,25 @@ namespace Terminal.Gui.ViewBase;
 /// </remarsk>
 public class Adornment : View, IDesignable
 {
+    internal Adornment (ViewConstructorMode mode) : base (mode) { }
+
+    internal Adornment (View parent, ViewConstructorMode mode) : base (mode)
+    {
+        // By default, Adornments can't get focus; has to be enabled specifically.
+        CanFocus = false;
+        TabStop = TabBehavior.NoStop;
+        Parent = parent;
+    }
+
     /// <inheritdoc/>
-    public Adornment ()
+    public Adornment () : this (ViewConstructorMode.Adornment)
     {
         /* Do nothing; A parameter-less constructor is required to support all views unit tests. */
     }
 
     /// <summary>Constructs a new adornment for the view specified by <paramref name="parent"/>.</summary>
     /// <param name="parent"></param>
-    public Adornment (View parent)
-    {
-        // By default, Adornments can't get focus; has to be enabled specifically.
-        CanFocus = false;
-        TabStop = TabBehavior.NoStop;
-        Parent = parent;
-
-        // By default, Adornments have no key bindings.
-        KeyBindings.Clear ();
-    }
+    public Adornment (View parent) : this (parent, ViewConstructorMode.Adornment) { }
 
     /// <summary>The Parent of this Adornment (the View this Adornment surrounds).</summary>
     /// <remarks>

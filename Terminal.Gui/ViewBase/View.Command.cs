@@ -4,25 +4,39 @@ namespace Terminal.Gui.ViewBase;
 
 public partial class View // Command APIs
 {
-    private readonly Dictionary<Command, CommandImplementation> _commandImplementations = new ();
+    private Dictionary<Command, CommandImplementation>? _commandImplementations;
+    private bool _commandDefaultsInitialized;
+
+    private Dictionary<Command, CommandImplementation> EnsureCommandImplementations ()
+    {
+        _commandImplementations ??= new ();
+
+        if (_commandDefaultsInitialized || _suppressDefaultCommands)
+        {
+            return _commandImplementations;
+        }
+
+        _commandDefaultsInitialized = true;
+
+        // Space or single-click - Raise Activating
+        _commandImplementations [Command.Activate] = DefaultActivateHandler;
+
+        // Enter - Raise Accepted
+        _commandImplementations [Command.Accept] = DefaultAcceptHandler;
+
+        // HotKey - SetFocus and raise HandlingHotKey
+        _commandImplementations [Command.HotKey] = DefaultHotKeyHandler;
+
+        // NotBound - Invoked if no handler is bound
+        _commandImplementations [Command.NotBound] = DefaultCommandNotBoundHandler;
+
+        return _commandImplementations;
+    }
 
     /// <summary>
     ///     Helper to configure all things Command related for a View. Called from the View constructor.
     /// </summary>
-    private void SetupCommands ()
-    {
-        // Space or single-click - Raise Activating
-        AddCommand (Command.Activate, DefaultActivateHandler);
-
-        // Enter - Raise Accepted
-        AddCommand (Command.Accept, DefaultAcceptHandler);
-
-        // HotKey - SetFocus and raise HandlingHotKey
-        AddCommand (Command.HotKey, DefaultHotKeyHandler);
-
-        // NotBound - Invoked if no handler is bound
-        AddCommand (Command.NotBound, DefaultCommandNotBoundHandler);
-    }
+    private void SetupCommands () => _ = EnsureCommandImplementations ();
 
     #region Command Management
 
@@ -58,7 +72,7 @@ public partial class View // Command APIs
     /// </remarks>
     /// <param name="command">The command.</param>
     /// <param name="impl">The delegate.</param>
-    protected void AddCommand (Command command, CommandImplementation impl) => _commandImplementations [command] = impl;
+    protected void AddCommand (Command command, CommandImplementation impl) => EnsureCommandImplementations () [command] = impl;
 
     /// <summary>
     ///     <para>
@@ -82,11 +96,11 @@ public partial class View // Command APIs
     /// </remarks>
     /// <param name="command">The command.</param>
     /// <param name="impl">The delegate.</param>
-    protected void AddCommand (Command command, Func<bool?> impl) => _commandImplementations [command] = _ => impl ();
+    protected void AddCommand (Command command, Func<bool?> impl) => EnsureCommandImplementations () [command] = _ => impl ();
 
     /// <summary>Returns all commands that are supported by this <see cref="View"/>.</summary>
     /// <returns></returns>
-    public IEnumerable<Command> GetSupportedCommands () => _commandImplementations.Keys;
+    public IEnumerable<Command> GetSupportedCommands () => _commandImplementations?.Keys ?? Enumerable.Empty<Command> ();
 
     #endregion Command Management
 
@@ -110,7 +124,9 @@ public partial class View // Command APIs
 
         foreach (Command command in commands)
         {
-            if (!_commandImplementations.ContainsKey (command))
+            Dictionary<Command, CommandImplementation> implementations = EnsureCommandImplementations ();
+
+            if (!implementations.ContainsKey (command))
             {
                 Logging.Warning (@$"{command} is not supported by this View ({GetType ().Name}). Binding: {binding}.");
             }
@@ -162,9 +178,16 @@ public partial class View // Command APIs
     /// </returns>
     public bool? InvokeCommand (Command command, ICommandContext? ctx)
     {
-        if (!_commandImplementations.TryGetValue (command, out CommandImplementation? implementation))
+        Dictionary<Command, CommandImplementation> implementations = EnsureCommandImplementations ();
+
+        if (!implementations.TryGetValue (command, out CommandImplementation? implementation))
         {
-            _commandImplementations.TryGetValue (Command.NotBound, out implementation);
+            implementations.TryGetValue (Command.NotBound, out implementation);
+        }
+
+        if (implementation is null)
+        {
+            return null;
         }
 
         Trace.Command (this, ctx, "Handler");

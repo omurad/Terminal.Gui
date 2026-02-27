@@ -86,7 +86,7 @@ public class Margin : Adornment
         {
             View view = stack.Pop ();
 
-            if (view.Margin is { } margin
+            if (view.MarginOrNull is { } margin
                 && margin.Thickness != Thickness.Empty
                 && margin.ViewportSettings.HasFlag (ViewportSettingsFlags.Transparent)
                 && margin.GetCachedClip () != null)

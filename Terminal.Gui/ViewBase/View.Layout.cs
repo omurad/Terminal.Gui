@@ -717,19 +717,19 @@ public partial class View // Layout APIs
         SubViewLayout?.Invoke (this, new LayoutEventArgs (contentSize));
 
         // The Adornments already have their Frame's set by SetRelativeLayout so we call LayoutSubViews vs. Layout here.
-        if (Margin is { SubViews.Count: > 0 })
+        if (_margin is { } margin && (margin.NeedsLayout || margin.SubViews.Count > 0))
         {
-            Margin.LayoutSubViews ();
+            margin.LayoutSubViews ();
         }
 
-        if (Border is { SubViews.Count: > 0 })
+        if (_border is { } border && (border.NeedsLayout || border.SubViews.Count > 0))
         {
-            Border.LayoutSubViews ();
+            border.LayoutSubViews ();
         }
 
-        if (Padding is { SubViews.Count: > 0 })
+        if (_padding is { } padding && (padding.NeedsLayout || padding.SubViews.Count > 0))
         {
-            Padding.LayoutSubViews ();
+            padding.LayoutSubViews ();
         }
 
         // Sort out the dependencies of the X, Y, Width, Height properties
@@ -854,19 +854,19 @@ public partial class View // Layout APIs
     {
         NeedsLayout = true;
 
-        if (Margin is { SubViews.Count: > 0 })
+        if (_margin is { SubViews.Count: > 0 })
         {
-            Margin.SetNeedsLayout ();
+            _margin.SetNeedsLayout ();
         }
 
-        if (Border is { SubViews.Count: > 0 })
+        if (_border is { SubViews.Count: > 0 })
         {
-            Border.SetNeedsLayout ();
+            _border.SetNeedsLayout ();
         }
 
-        if (Padding is { SubViews.Count: > 0 })
+        if (_padding is { SubViews.Count: > 0 })
         {
-            Padding.SetNeedsLayout ();
+            _padding.SetNeedsLayout ();
         }
 
         // TODO: Optimize this - see Setting_Thickness_Causes_Adornment_SubView_Layout
@@ -883,19 +883,19 @@ public partial class View // Layout APIs
             {
                 current.NeedsLayout = true;
 
-                if (current.Margin is { SubViews.Count: > 0 })
+                if (current._margin is { SubViews.Count: > 0 })
                 {
-                    current.Margin!.SetNeedsLayout ();
+                    current._margin.SetNeedsLayout ();
                 }
 
-                if (current.Border is { SubViews.Count: > 0 })
+                if (current._border is { SubViews.Count: > 0 })
                 {
-                    current.Border!.SetNeedsLayout ();
+                    current._border.SetNeedsLayout ();
                 }
 
-                if (current.Padding is { SubViews.Count: > 0 })
+                if (current._padding is { SubViews.Count: > 0 })
                 {
-                    current.Padding.SetNeedsLayout ();
+                    current._padding.SetNeedsLayout ();
                 }
 
                 foreach (View subview in current.SubViews)
@@ -1130,7 +1130,7 @@ public partial class View // Layout APIs
             superView = viewToMove.SuperView;
         }
 
-        if (superView?.Margin is { } && superView == viewToMove!.SuperView)
+        if (superView?._margin is { } && superView == viewToMove!.SuperView)
         {
             maxDimension -= superView.GetAdornmentsThickness ().Left + superView.GetAdornmentsThickness ().Right;
         }
@@ -1158,7 +1158,7 @@ public partial class View // Layout APIs
             maxDimension = viewToMove!.SuperView.Viewport.Height;
         }
 
-        if (superView?.Margin is { } && superView == viewToMove?.SuperView)
+        if (superView?._margin is { } && superView == viewToMove?.SuperView)
         {
             maxDimension -= superView.GetAdornmentsThickness ().Top + superView.GetAdornmentsThickness ().Bottom;
         }
@@ -1281,17 +1281,17 @@ public partial class View // Layout APIs
 
                                           bool? ret = null;
 
-                                          if (viewsUnderLocation.Contains (v.Margin) && v.Margin!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsUnderLocation.Contains (v._margin) && v._margin!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }
 
-                                          if (viewsUnderLocation.Contains (v.Border) && v.Border!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsUnderLocation.Contains (v._border) && v._border!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }
 
-                                          if (viewsUnderLocation.Contains (v.Padding) && v.Padding!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
+                                          if (viewsUnderLocation.Contains (v._padding) && v._padding!.ViewportSettings.HasFlag (excludeViewportSettingsFlags))
                                           {
                                               ret = true;
                                           }
@@ -1344,7 +1344,7 @@ public partial class View // Layout APIs
             // Push in reverse order (Padding, Border, Margin) so they're processed in correct order (Margin, Border, Padding)
             Point superViewRelativeLocation = currentView.SuperView?.ScreenToViewport (location) ?? location;
 
-            if (currentView.Padding is { } padding && padding.Thickness != Thickness.Empty)
+            if (currentView._padding is { } padding && padding.Thickness != Thickness.Empty)
             {
                 if (padding.Contains (superViewRelativeLocation) && padding.FrameToScreen ().Contains (location))
                 {
@@ -1352,7 +1352,7 @@ public partial class View // Layout APIs
                 }
             }
 
-            if (currentView.Border is { } border && border.Thickness != Thickness.Empty)
+            if (currentView._border is { } border && border.Thickness != Thickness.Empty)
             {
                 if (border.Contains (superViewRelativeLocation) && border.FrameToScreen ().Contains (location))
                 {
@@ -1360,7 +1360,7 @@ public partial class View // Layout APIs
                 }
             }
 
-            if (currentView.Margin is { } margin && margin.Thickness != Thickness.Empty)
+            if (currentView._margin is { } margin && margin.Thickness != Thickness.Empty)
             {
                 if (margin.Contains (superViewRelativeLocation) && margin.FrameToScreen ().Contains (location))
                 {

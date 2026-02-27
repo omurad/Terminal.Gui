@@ -4,6 +4,12 @@ using System.Diagnostics;
 
 namespace Terminal.Gui.ViewBase;
 
+internal enum ViewConstructorMode
+{
+    Default,
+    Adornment
+}
+
 #region API Docs
 
 /// <summary>
@@ -25,6 +31,10 @@ namespace Terminal.Gui.ViewBase;
 public partial class View : IDisposable, ISupportInitializeNotification
 {
     private bool _disposedValue;
+    private readonly bool _suppressDefaultCommands;
+    private readonly bool _suppressDefaultKeyboardBindings;
+    private readonly bool _suppressDefaultMouseBindings;
+    private bool _isInitializing;
 
     /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resource.</summary>
     public void Dispose ()
@@ -174,19 +184,34 @@ public partial class View : IDisposable, ISupportInitializeNotification
     ///         control the size and location of the view.
     ///     </para>
     /// </remarks>
-    public View ()
+    public View () : this (ViewConstructorMode.Default) { }
+
+    internal View (ViewConstructorMode mode)
     {
 #if DEBUG_IDISPOSABLE
         Instances.Add (this);
 #endif
 
+        _suppressDefaultCommands = mode == ViewConstructorMode.Adornment;
+        _suppressDefaultKeyboardBindings = mode == ViewConstructorMode.Adornment;
+        _suppressDefaultMouseBindings = mode == ViewConstructorMode.Adornment;
+
         SetupAdornments ();
 
-        SetupCommands ();
+        if (mode != ViewConstructorMode.Adornment)
+        {
+            SetupCommands ();
+        }
 
-        SetupKeyboard ();
+        if (mode != ViewConstructorMode.Adornment)
+        {
+            SetupKeyboard ();
+        }
 
-        SetupMouse ();
+        if (mode != ViewConstructorMode.Adornment)
+        {
+            SetupMouse ();
+        }
 
         SetupText ();
 
@@ -240,6 +265,8 @@ public partial class View : IDisposable, ISupportInitializeNotification
         _oldTabIndex = _tabIndex;
 #endif
 
+        _isInitializing = true;
+
         BeginInitAdornments ();
 
         if (InternalSubViews.Count <= 0)
@@ -273,6 +300,7 @@ public partial class View : IDisposable, ISupportInitializeNotification
         IsInitialized = true;
 
         EndInitAdornments ();
+        _isInitializing = false;
 
         // TODO: Move these into ViewText.cs as EndInit_Text() to consolidate.
         // TODO: Verify UpdateTextDirection really needs to be called here.
@@ -331,7 +359,7 @@ public partial class View : IDisposable, ISupportInitializeNotification
             OnEnabledChanged ();
             SetNeedsDraw ();
 
-            Border?.Enabled = field;
+            _border?.Enabled = field;
 
             foreach (View view in InternalSubViews)
             {

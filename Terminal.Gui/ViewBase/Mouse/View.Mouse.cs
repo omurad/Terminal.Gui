@@ -5,24 +5,47 @@ namespace Terminal.Gui.ViewBase;
 
 public partial class View // Mouse APIs
 {
-    /// <summary>
-    ///     Gets the mouse bindings for this view. By default, all mouse buttons are bound to the
-    ///     <see cref="Command.Activate"/> command.
-    /// </summary>
-    public MouseBindings MouseBindings { get; internal set; } = null!;
+    private MouseBindings? _mouseBindings;
+    private bool _mouseInitialized;
 
-    private void SetupMouse ()
+    private void EnsureMouseInitialized ()
     {
-        MouseBindings = new MouseBindings ();
+        if (_mouseInitialized)
+        {
+            return;
+        }
+
+        _mouseInitialized = true;
+        _mouseBindings ??= new MouseBindings ();
+
+        if (_suppressDefaultMouseBindings)
+        {
+            return;
+        }
 
         // By default, left button release activates (aligns with industry standards - allows cancellation).
         // Users can press, see visual feedback, drag away, and release outside to cancel.
-        MouseBindings.Add (MouseFlags.LeftButtonReleased, Command.Activate);
-        MouseBindings.Add (MouseFlags.LeftButtonReleased | MouseFlags.Ctrl, Command.Context);
+        _mouseBindings.Add (MouseFlags.LeftButtonReleased, Command.Activate);
+        _mouseBindings.Add (MouseFlags.LeftButtonReleased | MouseFlags.Ctrl, Command.Context);
 
         // Released bindings are added/removed dynamically when MouseHoldRepeat changes
         // See OnMouseHoldRepeatChanged
     }
+
+    /// <summary>
+    ///     Gets the mouse bindings for this view. By default, all mouse buttons are bound to the
+    ///     <see cref="Command.Activate"/> command.
+    /// </summary>
+    public MouseBindings MouseBindings
+    {
+        get
+        {
+            EnsureMouseInitialized ();
+            return _mouseBindings!;
+        }
+    }
+
+    private void SetupMouse () => EnsureMouseInitialized ();
 
     #region MouseEnterLeave
 

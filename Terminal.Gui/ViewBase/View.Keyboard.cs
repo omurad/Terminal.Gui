@@ -4,23 +4,39 @@ namespace Terminal.Gui.ViewBase;
 
 public partial class View // Keyboard APIs
 {
+    private KeyBindings? _keyBindings;
+    private KeyBindings? _hotKeyBindings;
+    private bool _keyboardInitialized;
+
+    private void EnsureKeyboardInitialized ()
+    {
+        if (_keyboardInitialized)
+        {
+            return;
+        }
+
+        _keyboardInitialized = true;
+        _keyBindings ??= new KeyBindings ();
+        _hotKeyBindings ??= new KeyBindings ();
+
+        if (!_suppressDefaultKeyboardBindings)
+        {
+            _keyBindings.Add (Key.Space, Command.Activate);
+
+            // QUESTION: Should subclasses be required to enable Accept?
+            _keyBindings.Add (Key.Enter, Command.Accept);
+
+            // Note, setting HotKey will bind HotKey to Command.HotKey
+            HotKeySpecifier = (Rune)'_';
+        }
+
+        TitleTextFormatter.HotKeyChanged += TitleTextFormatter_HotKeyChanged;
+    }
+
     /// <summary>
     ///     Helper to configure all things keyboard related for a View. Called from the View constructor.
     /// </summary>
-    private void SetupKeyboard ()
-    {
-        KeyBindings = new KeyBindings ();
-        KeyBindings.Add (Key.Space, Command.Activate);
-
-        // QUESTION: Should subclasses be required to enable Accept?
-        KeyBindings.Add (Key.Enter, Command.Accept);
-
-        HotKeyBindings = new KeyBindings ();
-
-        // Note, setting HotKey will bind HotKey to Command.HotKey
-        HotKeySpecifier = (Rune)'_';
-        TitleTextFormatter.HotKeyChanged += TitleTextFormatter_HotKeyChanged;
-    }
+    private void SetupKeyboard () => EnsureKeyboardInitialized ();
 
     /// <summary>
     ///     Helper to dispose all things keyboard related for a View. Called from the View Dispose method.
@@ -575,10 +591,24 @@ public partial class View // Keyboard APIs
     #region Key Bindings
 
     /// <summary>Gets the bindings for this view that will be invoked only if this view has focus.</summary>
-    public KeyBindings KeyBindings { get; internal set; } = null!;
+    public KeyBindings KeyBindings
+    {
+        get
+        {
+            EnsureKeyboardInitialized ();
+            return _keyBindings!;
+        }
+    }
 
     /// <summary>Gets the bindings for this view that will be invoked regardless of whether this view has focus or not.</summary>
-    public KeyBindings HotKeyBindings { get; internal set; } = null!;
+    public KeyBindings HotKeyBindings
+    {
+        get
+        {
+            EnsureKeyboardInitialized ();
+            return _hotKeyBindings!;
+        }
+    }
 
     /// <summary>
     ///     INTERNAL: Invokes the Commands bound to <paramref name="key"/>.

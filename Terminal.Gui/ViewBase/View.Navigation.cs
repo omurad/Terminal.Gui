@@ -355,19 +355,19 @@ public partial class View // Focus and cross-view navigation management (TabStop
             }
 
             // How about in Adornments?
-            if (Margin is { HasFocus: true })
+            if (_margin is { HasFocus: true })
             {
-                return Margin;
+                return _margin;
             }
 
-            if (Border is { HasFocus: true })
+            if (_border is { HasFocus: true })
             {
-                return Border;
+                return _border;
             }
 
-            if (Padding is { HasFocus: true })
+            if (_padding is { HasFocus: true })
             {
-                return Padding;
+                return _padding;
             }
 
             return null;
@@ -1026,9 +1026,9 @@ public partial class View // Focus and cross-view navigation management (TabStop
                 .Where (v => v is { CanFocus: true, Visible: true, Enabled: true });
         }
 
-        if (Padding is { CanFocus: true, Visible: true, Enabled: true } && Padding.TabStop == behavior && Padding.Thickness != Thickness.Empty)
+        if (_padding is { CanFocus: true, Visible: true, Enabled: true } && _padding.TabStop == behavior && _padding.Thickness != Thickness.Empty)
         {
-            filteredSubViews = filteredSubViews.Append (Padding);
+            filteredSubViews = filteredSubViews.Append (_padding);
         }
 
         // Border and Margin do not participate in focus chain navigation.

@@ -38,12 +38,12 @@ public partial class Border : Adornment
     private LineStyle? _lineStyle;
 
     /// <inheritdoc/>
-    public Border ()
+    public Border () : base (ViewConstructorMode.Default)
     { /* Do nothing; A parameter-less constructor is required to support all views unit tests. */
     }
 
     /// <inheritdoc/>
-    public Border (View parent) : base (parent)
+    public Border (View parent) : base (parent, ViewConstructorMode.Default)
     {
         Parent = parent;
         CanFocus = false;
